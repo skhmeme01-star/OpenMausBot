@@ -42,8 +42,19 @@ export function isOpenAIChatModel(id: string): boolean {
   return !/(audio|realtime|tts|transcribe|search|image|embedding|moderation|instruct|codex|computer-use|deep-research|-pro\b)/i.test(id);
 }
 
+/** Generic catalogs have no shared capability metadata. Recognize OpenAI's
+ * model families strictly and exclude known non-chat IDs for other providers;
+ * a manually selected ID is retained even when discovery filters it out. */
+export function isCompatibleChatModel(id: string): boolean {
+  if (/^(gpt-|chatgpt-|o\d)/i.test(id)) return isOpenAIChatModel(id);
+  return !/(embedding|embed-|rerank|whisper|tts|transcribe|moderation|dall-e|realtime|stable-diffusion|(^|\/)flux[.-])/i.test(id);
+}
+
 export interface OpenAICompatConfig {
   tools?: boolean;
+  allowAnonymous?: boolean;
+  fetchModels?: boolean;
+  customLlm?: boolean;
   url: string;
   /** Where the key comes from; see OWN_KEY_ENVS. */
   apiKeyEnv: string;
@@ -68,14 +79,24 @@ function decodeConfig(raw: unknown): OpenAICompatConfig {
   const config = (raw ?? {}) as Record<string, unknown>;
   if (config.tools !== undefined && typeof config.tools !== "boolean") throw new Error("tools must be a boolean");
   if (config.managedModels !== undefined && (!Array.isArray(config.managedModels) || !config.managedModels.length || config.managedModels.some(model => typeof model !== "string" || !model.trim()))) throw new Error("Invalid managed models.");
-  const ownKey = typeof config.apiKeyEnv === "string" && OWN_KEY_ENVS.has(config.apiKeyEnv);
+  for (const field of ["allowAnonymous", "fetchModels", "customLlm"]) {
+    if (config[field] !== undefined && typeof config[field] !== "boolean") throw new Error(`${field} must be a boolean`);
+  }
+  const ownKey = config.customLlm === true || (typeof config.apiKeyEnv === "string" && OWN_KEY_ENVS.has(config.apiKeyEnv));
   if (config.catalog !== undefined && config.catalog !== "openai") throw new Error("catalog must be \"openai\"");
   // Workspace defaults belong to the shared OpenAI-compatible connection only.
   const envUrl = ownKey ? undefined : process.env.OPENAI_COMPAT_URL;
+  if (config.allowAnonymous === true) {
+    const url = new URL(String(config.baseUrl || config.url || envUrl || "https://openrouter.ai/api/v1"));
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) throw new Error("Anonymous connections require a loopback URL");
+  }
   return {
+    allowAnonymous: config.allowAnonymous === true,
+    fetchModels: config.fetchModels !== false,
+    customLlm: config.customLlm === true,
     ...(config.tools !== undefined ? { tools: config.tools as boolean } : {}),
     ...(config.managedModels ? { managedModels: config.managedModels as string[] } : {}),
-    url: (typeof config.url === "string" && config.url ? config.url : envUrl || "https://openrouter.ai/api/v1")
+    url: (typeof config.baseUrl === "string" && config.baseUrl ? config.baseUrl : typeof config.url === "string" && config.url ? config.url : envUrl || "https://openrouter.ai/api/v1")
       .replace(/\/+$/, ""),
     apiKeyEnv: typeof config.apiKeyEnv === "string" && config.apiKeyEnv
       ? config.apiKeyEnv
@@ -130,7 +151,7 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
     const missingKey = !ownKeyVariable || OWN_KEY_ENVS.has(config.apiKeyEnv)
       ? "No API key — open Settings → API keys."
       : `no API key — set ${config.apiKeyEnv} or add it to the instance config`;
-    const seeded = config.catalog === "openai" ? OPENAI_MODELS : DEFAULT_MODELS;
+    const seeded: ModelCatalog = config.customLlm ? { default: config.model ?? "", options: [] } : config.catalog === "openai" ? OPENAI_MODELS : DEFAULT_MODELS;
     let catalog: ModelCatalog = config.managedModels
       ? { default: config.managedModels[0], options: config.managedModels.map(id => ({ id, label: id })) }
       : config.model
@@ -143,11 +164,12 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
       : seeded;
 
     const fetchModels = async () => {
-      if (config.managedModels) return;
-      if (!apiKey) return;
+      if (config.managedModels || config.fetchModels === false) return;
+      if (!apiKey && !config.allowAnonymous) return;
       try {
         const response = await fetch(`${config.url}/models`, {
-          headers: { authorization: `Bearer ${apiKey}` },
+          headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {},
+          redirect: "error",
           signal: AbortSignal.timeout(8_000),
         });
         if (!response.ok) return;
@@ -161,6 +183,7 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
             .filter((row) => typeof row.id === "string" && isOpenAIChatModel(row.id))
             .sort((a, b) => (typeof b.created === "number" ? b.created : 0) - (typeof a.created === "number" ? a.created : 0));
         }
+        if (config.customLlm) rows = rows.filter(row => typeof row.id === "string" && isCompatibleChatModel(row.id));
         const seen = new Set<string>();
         const options: ModelCatalog["options"] = [];
         for (const row of rows) {
@@ -183,12 +206,13 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
         // Catalog refresh is opportunistic; keep the seeded options.
       }
     };
-    if (apiKey) void fetchModels();
+    if (apiKey || config.allowAnonymous) void fetchModels();
 
     return createOpenAIChatRuntime({
       input,
       driverKind: DRIVER_KIND,
       apiKey,
+      allowAnonymous: config.allowAnonymous,
       apiUrl: config.url,
       tools: config.tools,
       computerUse: true,

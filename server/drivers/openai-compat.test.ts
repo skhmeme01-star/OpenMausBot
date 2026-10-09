@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { recordEvents } from "../testing/events.ts";
 import { buildTurnContext, NATIVELY_REPLAYING_DRIVER_KINDS } from "../turn-context.ts";
 import { instanceConfigs } from "../config.ts";
-import { OpenAICompatDriver } from "./openai-compat.ts";
+import { isCompatibleChatModel, OpenAICompatDriver } from "./openai-compat.ts";
 
 describe("OpenAICompatDriver", () => {
   const savedUrl = process.env.OPENAI_COMPAT_URL;
@@ -873,4 +873,40 @@ it("openai-compat preserves an explicit tools-off connection and rejects ambiguo
   expect(OpenAICompatDriver.decodeConfig({ tools: false })).toMatchObject({ tools: false });
   expect(OpenAICompatDriver.decodeConfig({ tools: true })).toMatchObject({ tools: true });
   expect(() => OpenAICompatDriver.decodeConfig({ tools: "false" })).toThrow("tools must be a boolean");
+});
+
+it("supports keyless custom loopback connections without workspace routing or seeded models", async () => {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [
+    { id: "llama3.2" }, { id: "text-embedding-small" }, { id: "llama3.2" },
+  ] })));
+  vi.stubGlobal("fetch", fetchMock);
+  const config = OpenAICompatDriver.decodeConfig({ baseUrl: "http://127.0.0.1:8045/v1/", model: "manual-model", apiKeyEnv: "FIXTURE_CUSTOM_KEY", customLlm: true, allowAnonymous: true });
+  const instance = await OpenAICompatDriver.create({ instanceId: "custom-fixture", displayName: "Custom", enabled: true, config, environment: {} });
+  try {
+    await instance.refreshModels?.();
+    expect(await instance.snapshot()).toMatchObject({ state: "available", authenticated: true });
+    expect(instance.models.options.map(row => row.id)).toEqual(["manual-model", "llama3.2"]);
+    expect(fetchMock.mock.calls[0]).toBeDefined();
+    expect(config.provider).toBeUndefined();
+    expect(config.url).toBe("http://127.0.0.1:8045/v1");
+  } finally { await instance.dispose(); vi.unstubAllGlobals(); }
+});
+
+it("rejects anonymous non-loopback engines and preserves manual catalogs when discovery is disabled", async () => {
+  expect(() => OpenAICompatDriver.decodeConfig({ url: "https://example.com/v1", allowAnonymous: true })).toThrow("loopback");
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const config = OpenAICompatDriver.decodeConfig({ url: "http://localhost:11434/v1", model: "manual", apiKeyEnv: "FIXTURE_CUSTOM_KEY", customLlm: true, allowAnonymous: true, fetchModels: false });
+  const instance = await OpenAICompatDriver.create({ instanceId: "custom-fixture", displayName: "Custom", enabled: true, config, environment: {} });
+  try {
+    await instance.refreshModels?.();
+    expect(instance.models.options.map(row => row.id)).toEqual(["manual"]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  } finally { await instance.dispose(); vi.unstubAllGlobals(); }
+});
+
+
+it("filters recognizable non-chat models without excluding custom instruct or vision chat IDs", () => {
+  for (const id of ["llama3.2", "qwen2.5-coder", "llava", "meta-llama/llama-3.3-70b-instruct", "gpt-5"]) expect(isCompatibleChatModel(id)).toBe(true);
+  for (const id of ["gpt-4o-audio-preview", "text-embedding-small", "nomic-embed-text", "whisper-1", "tts-1", "dall-e-3"]) expect(isCompatibleChatModel(id)).toBe(false);
 });

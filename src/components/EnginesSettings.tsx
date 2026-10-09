@@ -1,3 +1,4 @@
+import { CustomLlmSettings } from "./CustomLlmSettings";
 // Engines settings — per-instance CLI path override. One "Set CLI…" button
 // per engine reveals a picker: a "detected" dropdown of every binary the
 // server found on PATH, plus a manual path input. Saving first probes the
@@ -262,6 +263,11 @@ function EngineRow({ instance }: { instance: InstanceInfo }) {
     {!engineReady(instance) && <p className="mt-2 text-[12px] text-ink-secondary">{t("organization.engineUnavailable")}</p>}
   </EngineCard>;
 
+  if (instance.instanceId.startsWith("custom-llm-")) return <EngineCard instance={instance}>
+    {policyNote}
+    <p className="mt-2 text-[13px] text-ink-secondary">Edit this connection with Add / edit Custom LLM above.</p>
+  </EngineCard>;
+
   return (
     <EngineCard instance={instance}>
       {policyNote}
@@ -380,6 +386,7 @@ export function EnginesSettings() {
         </div>
         <RefreshEngines />
       </div>
+      <CustomLlmSettings />
       <EngineSections instances={rows} renderEngine={(instance) => <EngineRow instance={instance} />} />
     </div>
   );
