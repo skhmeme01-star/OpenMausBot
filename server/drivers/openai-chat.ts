@@ -84,6 +84,7 @@ interface RuntimeOptions<Config> {
   input: DriverCreateInput<Config>;
   driverKind: string;
   apiKey: string;
+  allowAnonymous?: boolean;
   apiUrl: string;
   models: () => ModelCatalog;
   requestBody(model: string, messages: OpenAIChatMessage[], stream: boolean): Record<string, unknown>;
@@ -283,7 +284,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       const response = await fetch(`${options.apiUrl}/chat/completions`, {
         method: "POST",
         ...(messages.some(message => Array.isArray(message.content) && message.content.some(part => part.type === "image_url")) ? { redirect: "error" as const } : {}),
-        headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json" },
+        headers: { ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}), "content-type": "application/json" },
         body: JSON.stringify({
           ...options.requestBody(model, messages, stream),
           ...(tools.length ? { tools } : {}),
@@ -470,7 +471,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
   };
 
   const sendTurn = async (turn: SendTurnInput) => {
-    if (!options.apiKey) throw new Error(options.missingKeyError);
+    if (!options.apiKey && !options.allowAnonymous) throw new Error(options.missingKeyError);
     if (active.has(turn.threadId)) throw new Error("a turn is already running on this thread");
     if (options.computerUse && (turn.images?.length || turn.integrations?.localComputer || turn.integrations?.browser)) assertImageTransport(options.apiUrl);
 
@@ -842,7 +843,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     },
     ...(options.refreshModels ? { refreshModels: options.refreshModels } : {}),
     snapshot: async () => {
-      if (!options.apiKey) return { state: "unavailable", reason: options.unavailableReason };
+      if (!options.apiKey && !options.allowAnonymous) return { state: "unavailable", reason: options.unavailableReason };
       if (keyRejected(options.apiUrl, options.apiKey)) return { state: "available", authenticated: false, reason: KEY_REJECTED_REASON, version: null };
       return { state: "available", authenticated: true, version: null, ...(options.billing ? { billing: options.billing } : {}) };
     },

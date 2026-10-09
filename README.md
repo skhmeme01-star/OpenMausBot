@@ -478,3 +478,26 @@ the corresponding notices, license texts, source locations, and SBOM are in
 OpenMausBot is an independent, open-source project inspired by Grok Bot. It is
 not affiliated with, endorsed by, or associated with xAI; "Grok" is a trademark
 of its respective owner.
+
+## Phoenix edition: Custom LLM
+
+Forked from OpenMausBot by milind-soni, Apache 2.0 — Phoenix edition
+
+In **Settings → Engines → Add / edit Custom LLM**, choose Ollama
+(`http://localhost:11434/v1`), llama.cpp (`http://localhost:8080/v1`),
+Antigravity proxy (`http://127.0.0.1:8045/v1`), or enter an OpenAI-compatible
+base URL. Enter an installed model ID, test the connection, then save.
+Select the new engine/model in a bot's existing model picker; it can be
+changed between turns in the same conversation.
+
+Loopback servers may run without an API key. For authenticated endpoints,
+paste a key or name an environment variable on the harness server. Saved
+keys use the existing permission-restricted provider config store and are
+never returned by the settings API. Changing the endpoint clears its saved
+key. Local URLs refer to the harness machine, including when using a remote
+UI. Non-loopback endpoints require HTTPS.
+
+Model discovery uses `/models`, excludes recognizable non-chat model IDs,
+and retains your manually entered ID if discovery fails or omits it. Disable
+discovery to use only the manual ID. Disable agent tools for text-only models;
+OpenAI-compatible transport does not guarantee tool or vision support.
