@@ -1,3 +1,4 @@
+import { createCustomLlmRoutes } from "./routes/custom-llms.ts";
 // OpenMausBot server — the harness host. Clients hold no transports
 // (upstream rule): the React app dispatches typed commands over HTTP and
 // folds one SSE event stream; every provider process runs here.
@@ -15997,6 +15998,22 @@ ROUTES.push(createAntigravityAccountRoutes({
   instances: () => persistableInstanceConfigs(cfg),
   persist: persistProviderInstance,
   describe: describeInstances,
+  exclusive: (work) => {
+    if (providerConfigBusy) return null;
+    providerConfigBusy = true;
+    return work().finally(() => { providerConfigBusy = false; });
+  },
+}));
+
+ROUTES.push(createCustomLlmRoutes({
+  instances: () => persistableInstanceConfigs(cfg),
+  persist: async (id, instances) => {
+    providerInstancesChanging.add(id);
+    try { await persistProviderInstance(id, instances); }
+    finally { providerInstancesChanging.delete(id); }
+  },
+  busy: (id) => busyProviderSelections().some(selection => selection.instanceId === id),
+  hosted: () => Boolean(hostedModels),
   exclusive: (work) => {
     if (providerConfigBusy) return null;
     providerConfigBusy = true;
