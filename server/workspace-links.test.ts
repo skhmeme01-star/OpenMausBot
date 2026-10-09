@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DATA_DIR } from "./config.ts";
 import { closeMessageDb } from "./message-db.ts";
 import {
-  ensureWorkspace,
+  ensureMemoryWorkspace,
   listMemoryLogs,
   listMemoryTopics,
   loadMemory,
@@ -19,7 +19,7 @@ import {
   readMemoryOnlyFromRegularFiles,
   readMemoryTopic,
   searchMemoryFiles,
-  workspaceDir,
+  memoryDir,
   WORKSPACES_DIR,
 } from "./workspace.ts";
 
@@ -30,7 +30,7 @@ beforeEach(() => {
   closeMessageDb();
   rmSync(DATA_DIR, { recursive: true, force: true });
   rmSync(WORKSPACES_DIR, { recursive: true, force: true });
-  ensureWorkspace(BOT);
+  ensureMemoryWorkspace(BOT);
   const outside = join(DATA_DIR, "outside");
   mkdirSync(join(outside, "folder"), { recursive: true });
   const text = `---\ntitle: mac\ndescription: ${INJECTED}\n---\n- ${INJECTED}\n`;
@@ -38,7 +38,7 @@ beforeEach(() => {
   writeFileSync(join(outside, "topic.md"), text);
   writeFileSync(join(outside, "2026-09-30.md"), `- 10:00 · ${INJECTED}\n`);
   writeFileSync(join(outside, "folder", "mac.md"), text);
-  const dir = workspaceDir(BOT);
+  const dir = memoryDir(BOT);
   rmSync(join(dir, "MEMORY.md"));
   symlinkSync(join(outside, "memory.md"), join(dir, "MEMORY.md"));
   symlinkSync(join(outside, "topic.md"), join(dir, "memory", "mac.md"));
@@ -64,7 +64,7 @@ describe("memory read through a link", () => {
     expect(readMemoryLog(BOT, "2026-09-30.md")).toBeNull();
     expect(searchMemoryFiles(BOT, "quoting", 5)).toEqual([]);
     // A link swapped in for the memory folder itself hides everything behind it.
-    const dir = workspaceDir(BOT);
+    const dir = memoryDir(BOT);
     rmSync(join(dir, "memory"), { recursive: true });
     symlinkSync(join(DATA_DIR, "outside", "folder"), join(dir, "memory"));
     expect(listMemoryTopics(BOT)).toEqual([]);

@@ -31,11 +31,15 @@ it("gives a room turn the memory_update guidance, not the file-tools one", async
     const { bot: lead } = await runControlOmb(["new-bot", "--name", "Lead"], { env }) as { bot: { id: string } };
     // SAFETY: same shape as above
     const { bot: helper } = await runControlOmb(["new-bot", "--name", "Helper"], { env }) as { bot: { id: string } };
+    await api("POST", `/api/bots/${lead.id}/memory`, { action: "append", text: "The fixture garden is watered on Mondays." });
     // A 1:1 turn first: it is the reference the room turn must match.
     await runControlOmb(["send", "--bot", lead.id, "--text", "Remember that the fixture garden is watered on Mondays."], { env });
     await runControlOmb(["wait", "--bot", lead.id, "--timeout", "30"], { env });
     const direct = dump()?.systemPrompt ?? "";
     expect(direct).toContain("Change MEMORY.md only with memory_update");
+    expect(direct).toContain("<long-term-memory>");
+    expect(direct).toContain("The fixture garden is watered on Mondays.");
+    expect(direct).toContain("</long-term-memory>");
     expect(direct).not.toContain("update it with your file tools");
 
     // SAFETY: the groups route returns the created room under `group`
@@ -51,6 +55,7 @@ it("gives a room turn the memory_update guidance, not the file-tools one", async
     await runControlOmb(["wait", "--bot", lead.id, "--timeout", "30"], { env });
     const room = dump()?.systemPrompt ?? "";
     expect(room).toContain("Change MEMORY.md only with memory_update");
+    expect(room).toContain("The fixture garden is watered on Mondays.");
     expect(room).not.toContain("update it with your file tools");
   } finally {
     await fixture.close();

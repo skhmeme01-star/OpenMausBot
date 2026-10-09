@@ -26,9 +26,9 @@ import {
   MEMORY_FILE_MAX_BYTES,
   MEMORY_MAX_BYTES,
   MEMORY_MAX_LINES,
-  ensureWorkspace,
+  ensureMemoryWorkspace,
   isMemoryTopicName,
-  workspaceDir,
+  memoryDir,
 } from "./workspace.ts";
 
 export const MEMORY_INDEX = "MEMORY.md";
@@ -110,7 +110,7 @@ function relativeSegments(ref: MemoryDocRef): string[] {
 export function resolveMemoryPath(botId: string, path: string): string {
   assertBotId(botId);
   const ref = parseMemoryPath(path);
-  const root = workspaceDir(botId);
+  const root = memoryDir(botId);
   const absolute = join(root, ...relativeSegments(ref));
   let realRoot: string;
   try {
@@ -226,7 +226,7 @@ function listMarkdown(dir: string, prefix: string): MemoryFileInfo[] {
  * has nothing to show, and an overview must not leave a folder behind. */
 export function memoryOverview(botId: string): MemoryOverview {
   assertBotId(botId);
-  const root = workspaceDir(botId);
+  const root = memoryDir(botId);
   let raw = "";
   try {
     raw = readFileSync(resolveMemoryPath(botId, MEMORY_INDEX), "utf8");
@@ -284,8 +284,8 @@ export function writeMemoryDoc(
   opts: { expectedHash?: string } = {},
 ): MemoryWriteResult {
   const ref = parseMemoryPath(path);
-  ensureWorkspace(botId);
-  if (ref.kind === "log") mkdirSync(join(workspaceDir(botId), "memory", "log"), { recursive: true, mode: 0o700 });
+  ensureMemoryWorkspace(botId);
+  if (ref.kind === "log") mkdirSync(join(memoryDir(botId), "memory", "log"), { recursive: true, mode: 0o700 });
   const absolute = resolveMemoryPath(botId, path);
   const after = redactSecretsInText(text);
   const bytes = Buffer.byteLength(after, "utf8");
@@ -310,7 +310,7 @@ export function writeMemoryDoc(
 }
 
 /** Topic and log files only. MEMORY.md is loaded unconditionally at turn
- * start and the next ensureWorkspace() would silently reseed it, which
+ * start and the next ensureMemoryWorkspace() would silently reseed it, which
  * reads as "delete did nothing" — clearing it is a write of "". */
 export function deleteMemoryDoc(botId: string, path: string): { path: string; before: string | null } {
   const ref = parseMemoryPath(path);
@@ -370,7 +370,7 @@ export async function openMemoryLocation(
   run: OpenerRunner = spawnOpener,
 ): Promise<{ ok: true; workspacePath: string } | { ok: false; error: string; workspacePath: string }> {
   assertBotId(botId);
-  const workspacePath = ensureWorkspace(botId);
+  const workspacePath = ensureMemoryWorkspace(botId);
   const location = target === "obsidian" ? obsidianUrlFor(workspacePath) : workspacePath;
   let command: string;
   let args: string[];

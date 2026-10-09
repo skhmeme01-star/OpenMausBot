@@ -17,7 +17,8 @@ instructions to forbid that when memory must stay in another source of truth.
 ## Where it lives
 
 ```
-~/.openmausbot/workspaces/<botId>/
+~/.openmausbot/bots/<botId>/
+├── SOUL.md              standing-instructions mirror
 ├── MEMORY.md            the notes that load into every conversation
 └── memory/
     ├── <topic>.md       longer notes the bot reads on demand
@@ -26,9 +27,13 @@ instructions to forbid that when memory must stay in another source of truth.
         └── 2026-09-10.md   what the bot did that day, in its own words
 ```
 
-The folder is the bot's private workspace: the directory its file tools work in
-when it has no project folder set. It is created the first time the bot runs a
-turn. **Open in Obsidian** and **Show in Finder** (Explorer, or your file
+The folder is independent of the bot's working directory and contains its
+`SOUL.md` mirror alongside durable memory. Working files and skills remain in
+`~/.openmausbot/workspaces/<botId>/`; task files remain in `task-workspaces/`.
+The first managed memory write or workspace launch moves legacy `MEMORY.md`
+and `memory/` from the old workspace when the destination is absent. Existing
+canonical files win; legacy files with a conflicting destination remain on disk.
+Reads alone do not create or migrate folders. **Open in Obsidian** and **Show in Finder** (Explorer, or your file
 manager) in the Memory panel open this folder; because it is on the server's
 disk, those buttons only work from the computer running OpenMausBot — a
 paired phone or a remote browser is shown the path instead.
@@ -284,3 +289,31 @@ free form, or one you rewrite by hand, works the same.
 | `POST` | `/api/profile/learned/:id/remove` | Takes that line out of About me; the fact is never added again. |
 
 All of them need the owner (admin) session, like the other bot-settings routes.
+
+## Phoenix edition API and tools
+
+The existing **Bot Settings → Memory** editor remains the UI for these files,
+including conflict detection, history and undo. These routes require the same
+admin scope as the bot's settings:
+
+- `GET /api/bots/<botId>/memory`: read the index and memory overview.
+- `POST /api/bots/<botId>/memory`: curated update with `action` (`append`,
+  `replace`, `supersede`, `remove`), `text`, and `oldText` for exact unique
+  corrections. Optional `expectedHash` rejects stale edits with 409; optional
+  `until` applies to append/supersede. Appended facts receive a date.
+- `PUT /api/bots/<botId>/memory/file`: save the editor's whole document with
+  `path`, `text`, and optional `expectedHash`. Retains the existing journal.
+
+Agents use `memory_read` to read their own complete index, and the existing
+`memory_update` to append, replace, remove or supersede a fact. Reads are
+reviewed read-only tools; writes retain engine approval policy, including the
+person's explicit Full Access grant. Custom LLM turns waive approval only for
+the actual built-in `memory_read`, never a custom MCP server with the same name
+or an untrusted read-only annotation. Both tools disappear when memory is off.
+
+The common system-context builder wraps saved text in `<long-term-memory>`
+delimiters for direct conversations and rooms, including Claude, Codex and
+Custom LLM engines. Durable notes are facts, preferences and decisions; never
+transcripts, credentials or instructions copied from external sources. Date
+facts and correct or supersede outdated claims instead of adding contradictions.
+The existing budget, expiration, redaction and archive rules still apply.

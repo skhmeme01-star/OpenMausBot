@@ -371,6 +371,7 @@ import {
   updateMemory,
   appendMemoryLog,
   memorySystemPrompt,
+  memoryDir,
   memorySourceLabel,
   searchMemoryFiles,
   SESSION_SEARCH_SYSTEM_PROMPT,
@@ -750,7 +751,7 @@ const lendingMemory = CLOUD_HOME ? createLendingMemory({
     // (A bot's own conversations are never a room's: its opener is enough.)
     const ownerOpened = (threadId: string) => { const starter = threadStarters.get(threadId); return starter === undefined || cloudOwnerPerson(starter); };
     return botMemoryFiles(bot ? { id: bot.id, cwd: bot.cwd, tasks: store.tasks(bot.id).filter((task) => ownerOpened(task.threadId)) } : undefined,
-      { workspace: ensureWorkspace, taskWorkspaces: TASK_WORKSPACES_DIR });
+      { workspace: memoryDir, taskWorkspaces: TASK_WORKSPACES_DIR });
   },
   knownBots: () => store.bots.map((bot) => bot.id),
   log: (line) => console.warn(line),
@@ -16800,6 +16801,10 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
       // On a Cloud home only the owner's conversations get here (above): the
       // write is theirs (server/lending-memory.ts).
       const ownersWrite = <T,>(write: () => T): T => lendingMemory ? lendingMemory.trustedWrite(internalSender.id, write) : write();
+      if (method === "GET" && path === "/api/internal/memory") {
+        if (internalSender.memoryEnabled === false) return json(res, 403, { error: "Memory is disabled for this bot." });
+        return json(res, 200, readMemoryFile(internalSender.id));
+      }
       if (method === "POST" && path === "/api/internal/memory") {
         const body = await readInternalBody();
         const result = ownersWrite(() => updateMemory(internalSender.id, { action: body.action, text: body.text, oldText: body.oldText, ...(body.until !== undefined ? { until: body.until } : {}) }, { source: memorySource() }));

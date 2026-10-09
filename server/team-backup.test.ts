@@ -7,7 +7,7 @@ import { RoutineManager } from "./routines.ts";
 import { createTeamBackup, importTeamBackup } from "./team-backup.ts";
 import { parseTeamBackup } from "../shared/team-backup.ts";
 import { soulFile, soulHash } from "./bot-folder.ts";
-import { appendMemoryLog, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, updateMemory, workspaceDir, writeMemoryTopic } from "./workspace.ts";
+import { appendMemoryLog, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, updateMemory, memoryDir, writeMemoryTopic } from "./workspace.ts";
 
 const selection = () => ({ instanceId: "fixture", model: "fixture-model" });
 
@@ -81,7 +81,7 @@ describe("additive portable team backups", () => {
     appendMemoryLog(chief.id, "shipped 0.1.70", { source: 'chat "Deploy"', now });
     // a topic the bot's own file tools wrote never met the server's scrub
     const key = `sk-ant-api03-${"k".repeat(40)}`;
-    writeFileSync(join(workspaceDir(chief.id), "memory", "keys.md"), `anthropic: ${key}\n`);
+    writeFileSync(join(memoryDir(chief.id), "memory", "keys.md"), `anthropic: ${key}\n`);
 
     const backup = createTeamBackup(store, routines.listRoutines(), "With memory");
     const exported = backup.bots.find((bot) => bot.key === chief.id)!.memory!;
@@ -102,7 +102,7 @@ describe("additive portable team backups", () => {
     expect(readMemoryLog(imported.id, "2026-09-10.md")).toBe(exported.logs[0].text);
     expect(readFileSync(soulFile(imported.id), "utf8")).toBe(chief.soul);
     if (process.platform !== "win32") {
-      const dir = workspaceDir(imported.id);
+      const dir = memoryDir(imported.id);
       expect(statSync(join(dir, "memory")).mode & 0o777).toBe(0o700);
       expect(statSync(join(dir, "memory", "log")).mode & 0o777).toBe(0o700);
       for (const file of ["MEMORY.md", "memory/deploys.md", "memory/keys.md", "memory/log/2026-09-10.md"]) {

@@ -24,7 +24,7 @@ import {
   unifiedDiff,
 } from "./memory-journal.ts";
 import { MEMORY_INDEX, hashMemoryText, readMemoryDoc } from "./memory-store.ts";
-import { WORKSPACES_DIR, ensureWorkspace, workspaceDir } from "./workspace.ts";
+import { WORKSPACES_DIR, ensureMemoryWorkspace, memoryDir } from "./workspace.ts";
 
 let counter = 0;
 const freshBot = () => `journal-bot-${process.pid}-${counter++}`;
@@ -124,7 +124,7 @@ describe("journalMemoryWrite / readMemoryJournal", () => {
   it("lets the store's refusals through untouched", () => {
     const bot = freshBot();
     const opened = journalMemoryWrite(bot, MEMORY_INDEX, "- a\n", { actor: "person", via: "ui" });
-    writeFileSync(join(workspaceDir(bot), "MEMORY.md"), "- a\n- bot\n");
+    writeFileSync(join(memoryDir(bot), "MEMORY.md"), "- a\n- bot\n");
     expect(() => journalMemoryWrite(bot, MEMORY_INDEX, "- mine\n", { actor: "person", via: "ui", expectedHash: opened.doc.hash })).toThrow(/changed since/);
     expect(() => journalMemoryWrite(bot, "../x.md", "", { actor: "person", via: "ui" })).toThrow(/not a memory file/);
   });
@@ -190,7 +190,7 @@ describe("revertMemoryChange", () => {
     expect(result.ok).toBe(true);
     expect(readMemoryDoc(bot, "memory/y.md").text).toBe("original\n");
     // Windows has no POSIX mode bits: the write path sets them, the platform reports 0666.
-    if (process.platform !== "win32") expect(statSync(join(workspaceDir(bot), "memory", "y.md")).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(join(memoryDir(bot), "memory", "y.md")).mode & 0o777).toBe(0o600);
     await flushMemoryJournal(bot);
     const [latest] = readMemoryJournal(bot, 1);
     expect(latest).toMatchObject({ actor: "person", via: "revert", before: "agent rewrote this\n", kind: "edited" });
@@ -204,7 +204,7 @@ describe("revertMemoryChange", () => {
     const created = journalMemoryWrite(bot, "memory/new.md", "fresh\n", { actor: "bot", via: "turn" });
     await flushMemoryJournal(bot);
     expect(revertMemoryChange(bot, created.entry!.id).ok).toBe(true);
-    expect(existsSync(join(workspaceDir(bot), "memory", "new.md"))).toBe(false);
+    expect(existsSync(join(memoryDir(bot), "memory", "new.md"))).toBe(false);
     journalMemoryWrite(bot, "memory/keep.md", "keep me\n", { actor: "person", via: "ui" });
     const deleted = journalMemoryDelete(bot, "memory/keep.md", { actor: "bot", via: "turn" });
     await flushMemoryJournal(bot);
@@ -215,10 +215,10 @@ describe("revertMemoryChange", () => {
   it("empties MEMORY.md rather than deleting it when reverting its creation", async () => {
     const bot = freshBot();
     const row = recordMemoryChange(bot, { path: MEMORY_INDEX, actor: "bot", via: "turn", before: null, after: "hello" });
-    ensureWorkspace(bot);
+    ensureMemoryWorkspace(bot);
     await flushMemoryJournal(bot);
     expect(revertMemoryChange(bot, row!.id).ok).toBe(true);
-    expect(existsSync(join(workspaceDir(bot), "MEMORY.md"))).toBe(true);
+    expect(existsSync(join(memoryDir(bot), "MEMORY.md"))).toBe(true);
     expect(readMemoryDoc(bot, MEMORY_INDEX).text).toBe("");
   });
 
@@ -230,18 +230,18 @@ describe("revertMemoryChange", () => {
 describe("turn boundary", () => {
   it("journals what a turn wrote with its file tools, once, as the bot's", async () => {
     const bot = freshBot();
-    ensureWorkspace(bot);
-    writeFileSync(join(workspaceDir(bot), "memory", "existing.md"), "was here\n");
+    ensureMemoryWorkspace(bot);
+    writeFileSync(join(memoryDir(bot), "memory", "existing.md"), "was here\n");
     beginMemoryTurn(bot, "thread-a");
     await flushMemoryJournal(bot);
     // first sighting is not a change
     expect(readMemoryJournal(bot, 10)).toEqual([]);
 
     // the bot's file tools at work
-    writeFileSync(join(workspaceDir(bot), "MEMORY.md"), "- 2026-09-10 · from chat \"Follow-up\" · user prefers short replies\n");
-    writeFileSync(join(workspaceDir(bot), "memory", "existing.md"), "was here\nand more\n");
-    mkdirSync(join(workspaceDir(bot), "memory", "log"), { recursive: true });
-    writeFileSync(join(workspaceDir(bot), "memory", "log", "2026-09-10.md"), "- did a thing\n");
+    writeFileSync(join(memoryDir(bot), "MEMORY.md"), "- 2026-09-10 · from chat \"Follow-up\" · user prefers short replies\n");
+    writeFileSync(join(memoryDir(bot), "memory", "existing.md"), "was here\nand more\n");
+    mkdirSync(join(memoryDir(bot), "memory", "log"), { recursive: true });
+    writeFileSync(join(memoryDir(bot), "memory", "log", "2026-09-10.md"), "- did a thing\n");
     const rows = endMemoryTurn("thread-a");
     expect(rows.map((r) => [r.path, r.kind, r.actor, r.via, r.threadId])).toEqual([
       [MEMORY_INDEX, "edited", "bot", "turn", "thread-a"],
@@ -258,12 +258,12 @@ describe("turn boundary", () => {
 
   it("attributes an edit made outside the app between turns to the person, via disk", async () => {
     const bot = freshBot();
-    ensureWorkspace(bot);
+    ensureMemoryWorkspace(bot);
     beginMemoryTurn(bot, "t1");
     endMemoryTurn("t1");
-    writeFileSync(join(workspaceDir(bot), "MEMORY.md"), "edited in Obsidian\n");
-    rmSync(join(workspaceDir(bot), "memory"), { recursive: true });
-    mkdirSync(join(workspaceDir(bot), "memory"));
+    writeFileSync(join(memoryDir(bot), "MEMORY.md"), "edited in Obsidian\n");
+    rmSync(join(memoryDir(bot), "memory"), { recursive: true });
+    mkdirSync(join(memoryDir(bot), "memory"));
     beginMemoryTurn(bot, "t2");
     endMemoryTurn("t2");
     // the disk edit was journaled at begin, not at end
@@ -273,7 +273,7 @@ describe("turn boundary", () => {
 
   it("does not re-journal a person's route write as the bot's when the turn ends", () => {
     const bot = freshBot();
-    ensureWorkspace(bot);
+    ensureMemoryWorkspace(bot);
     beginMemoryTurn(bot, "t1");
     journalMemoryWrite(bot, MEMORY_INDEX, "- person note\n", { actor: "person", via: "ui" });
     expect(endMemoryTurn("t1")).toEqual([]);
@@ -281,10 +281,10 @@ describe("turn boundary", () => {
 
   it("journals a file the turn deleted", () => {
     const bot = freshBot();
-    ensureWorkspace(bot);
-    writeFileSync(join(workspaceDir(bot), "memory", "doomed.md"), "x\n");
+    ensureMemoryWorkspace(bot);
+    writeFileSync(join(memoryDir(bot), "memory", "doomed.md"), "x\n");
     beginMemoryTurn(bot, "t1");
-    rmSync(join(workspaceDir(bot), "memory", "doomed.md"));
+    rmSync(join(memoryDir(bot), "memory", "doomed.md"));
     const [row] = endMemoryTurn("t1");
     expect(row).toMatchObject({ path: "memory/doomed.md", kind: "deleted", before: "x\n", actor: "bot" });
   });
@@ -292,21 +292,21 @@ describe("turn boundary", () => {
   it("diffs every member that spoke on a room thread", () => {
     const a = freshBot();
     const b = freshBot();
-    ensureWorkspace(a);
-    ensureWorkspace(b);
+    ensureMemoryWorkspace(a);
+    ensureMemoryWorkspace(b);
     beginMemoryTurn(a, "room-1");
     beginMemoryTurn(b, "room-1");
-    writeFileSync(join(workspaceDir(a), "MEMORY.md"), "a learned\n");
-    writeFileSync(join(workspaceDir(b), "MEMORY.md"), "b learned\n");
+    writeFileSync(join(memoryDir(a), "MEMORY.md"), "a learned\n");
+    writeFileSync(join(memoryDir(b), "MEMORY.md"), "b learned\n");
     const rows = endMemoryTurn("room-1");
     expect(rows.map((r) => r.botId).sort()).toEqual([a, b].sort());
   });
 
   it("never throws when a workspace vanished mid-turn", () => {
     const bot = freshBot();
-    ensureWorkspace(bot);
+    ensureMemoryWorkspace(bot);
     beginMemoryTurn(bot, "t1");
-    rmSync(workspaceDir(bot), { recursive: true, force: true });
+    rmSync(memoryDir(bot), { recursive: true, force: true });
     expect(() => endMemoryTurn("t1")).not.toThrow();
     expect(() => beginMemoryTurn("bad/id", "t2")).not.toThrow();
   });

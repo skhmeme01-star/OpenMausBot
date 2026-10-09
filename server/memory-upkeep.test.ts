@@ -14,7 +14,7 @@ import { applyTidy, contradictionBudget, contradictionCandidates, parseContradic
 import { createMemoryUpkeep, NO_TEXT_ENGINE, type UpkeepBot, type UpkeepEngine } from "./memory-upkeep.ts";
 import { closeMessageDb } from "./message-db.ts";
 import { aboutMeLine, appendAboutMe, commitLearned, listLearnedFacts, planLearned, removeLearned } from "./profile-learned.ts";
-import { ensureWorkspace, readMemoryTopic, workspaceDir, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "./workspace.ts";
+import { ensureMemoryWorkspace, readMemoryTopic, memoryDir, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "./workspace.ts";
 
 const TODAY = "2026-09-25";
 
@@ -250,10 +250,10 @@ describe("the upkeep loop", () => {
     };
   });
 
-  const memory = () => readFileSync(join(workspaceDir(BOT.id), "MEMORY.md"), "utf8");
+  const memory = () => readFileSync(join(memoryDir(BOT.id), "MEMORY.md"), "utf8");
 
   it("captures new facts as dated, sourced entries, journaled as upkeep, and adds About me lines", async () => {
-    ensureWorkspace(BOT.id);
+    ensureMemoryWorkspace(BOT.id);
     answers.push(JSON.stringify([
       { text: "The person is vegetarian", kind: "preference", aboutUser: true, confidence: 0.9 },
       { text: "The person has exams this weekend", kind: "fact", until: "2026-09-27", confidence: 0.9 },
@@ -287,7 +287,7 @@ describe("the upkeep loop", () => {
   });
 
   it("adds to About me a fact the notebook already holds, without appending it again", async () => {
-    ensureWorkspace(BOT.id);
+    ensureMemoryWorkspace(BOT.id);
     writeMemoryFile(BOT.id, "- 2026-09-25 · The user's company is called Northwind Studio.\n");
     answers.push(JSON.stringify([{ text: "The user's company is Northwind Studio", kind: "fact", aboutUser: true, noted: true }]));
     const report = await upkeep().capture({ botId: BOT.id, threadId: "t1", turns: [{ person: "My company is Northwind Studio", bot: "Noted." }] });
@@ -296,7 +296,7 @@ describe("the upkeep loop", () => {
   });
 
   it("files detail into a topic it creates, with other words for it", async () => {
-    ensureWorkspace(BOT.id);
+    ensureMemoryWorkspace(BOT.id);
     answers.push(JSON.stringify([
       { text: "The person loves pasta", kind: "preference", topic: "Food", topicAliases: ["restaurants", "dinner"] },
       { text: "Sister Asha lives in Delhi", kind: "fact", topic: "family", topicAliases: ["sister", "asha"] },
@@ -333,7 +333,7 @@ describe("the upkeep loop", () => {
   });
 
   it("tidies: archives the expired, merges duplicates, strikes a contradiction, all undoable rows", async () => {
-    ensureWorkspace(BOT.id);
+    ensureMemoryWorkspace(BOT.id);
     writeMemoryFile(BOT.id, [
       "- 2026-09-01 · Exams this weekend · until 2026-09-07",
       "- 2026-09-02 · Office is in Pune",
@@ -363,7 +363,7 @@ describe("the upkeep loop", () => {
   });
 
   it("moves detail the bot wrote itself out of MEMORY.md into topics, keeping core facts", async () => {
-    ensureWorkspace(BOT.id);
+    ensureMemoryWorkspace(BOT.id);
     writeMemoryFile(BOT.id, [
       "- 2026-09-26 · from chat \"Food\" · The user is allergic to peanuts.",
       "- 2026-09-26 · from chat \"Food\" · The user's sister Asha is a doctor in Delhi.",
@@ -395,7 +395,7 @@ describe("the upkeep loop", () => {
   });
 
   it("organizes right after a capture, whoever wrote the line", async () => {
-    ensureWorkspace(BOT.id);
+    ensureMemoryWorkspace(BOT.id);
     writeMemoryFile(BOT.id, "- 2026-09-26 · The client Acme wants logo revisions.\n");
     organizeAnswer = '{"moves":[{"i":0,"topic":"acme","aliases":["client"]}]}';
     const report = await upkeep().capture({ botId: BOT.id, threadId: "t1", turns: [{ person: "hi", bot: "hello" }] });
@@ -422,7 +422,7 @@ describe("the upkeep loop", () => {
 
   it("keeps failed topic moves in the notebook and retries them without duplicating successful moves", async () => {
     writeMemoryFile(BOT.id, "- 2026-09-25 · Acme needs a logo.\n- 2026-09-25 · Beta needs a website.\n");
-    const blocked = join(workspaceDir(BOT.id), "memory", "beta.md");
+    const blocked = join(memoryDir(BOT.id), "memory", "beta.md");
     mkdirSync(blocked);
     organizeAnswer = '{"moves":[{"i":0,"topic":"acme"},{"i":1,"topic":"beta"}]}';
     const service = upkeep();
@@ -458,11 +458,11 @@ describe("the upkeep loop", () => {
   });
 
   it("makes every tidy write inside the host's writing hook, so a Cloud home can tell it from someone else's", async () => {
-    ensureWorkspace(BOT.id);
+    ensureMemoryWorkspace(BOT.id);
     writeMemoryFile(BOT.id, "- 2026-09-01 · Exams this weekend · until 2026-09-07\n- 2026-09-02 · Likes tea\n- 2026-09-03 · Likes tea\n");
     writeMemoryTopic(BOT.id, "travel.md", "---\ntitle: travel\n---\n\n- 2026-09-01 · In Goa · until 2026-09-07\n- 2026-09-02 · Likes window seats\n");
     const files = () => {
-      const dir = workspaceDir(BOT.id);
+      const dir = memoryDir(BOT.id);
       const out = new Map<string, string>([["MEMORY.md", readFileSync(join(dir, "MEMORY.md"), "utf8")]]);
       for (const name of readdirSync(join(dir, "memory"))) if (name.endsWith(".md")) out.set(name, readFileSync(join(dir, "memory", name), "utf8"));
       return out;
@@ -487,7 +487,7 @@ describe("the upkeep loop", () => {
   });
 
   it("tidies topic files too: expired lines to the archive, duplicates merged", async () => {
-    ensureWorkspace(BOT.id);
+    ensureMemoryWorkspace(BOT.id);
     writeMemoryTopic(BOT.id, "travel.md", "---\ntitle: travel\n---\n\n- 2026-09-01 · In Goa · until 2026-09-07\n- 2026-09-02 · Likes window seats\n- 2026-09-03 · Likes window seats\n");
     const report = await upkeep().tidy(BOT.id);
     expect(report).toMatchObject({ expired: 1, duplicates: 1 });
@@ -498,7 +498,7 @@ describe("the upkeep loop", () => {
   });
 
   it("skips the model step on small notebooks and on engines without a text call", async () => {
-    ensureWorkspace(BOT.id);
+    ensureMemoryWorkspace(BOT.id);
     writeMemoryFile(BOT.id, "- 2026-09-02 · Balance is -10\n- 2026-09-03 · Balance is 10\n");
     const report = await upkeep().tidy(BOT.id);
     expect(report.contradictionsChecked).toBe(false);
@@ -510,7 +510,7 @@ describe("the upkeep loop", () => {
   });
 
   it("runs the nightly tidy once a day after the hour, never while the bot is busy", async () => {
-    ensureWorkspace(BOT.id);
+    ensureMemoryWorkspace(BOT.id);
     writeMemoryFile(BOT.id, "- 2026-09-01 · Trip · until 2026-09-02\n");
     const loop = upkeep();
     clock = new Date(2026, 8, 25, 2, 0);

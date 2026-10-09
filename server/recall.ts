@@ -11,7 +11,7 @@
 // are neutralised so a note cannot close the block; the block is capped.
 import { recallMessages, recallTerms, type MemoryHit, type RecallHit } from "./message-db.ts";
 import { parseTopicHeader, readTopicHead, topicBody, topicWords } from "./memory-topics.ts";
-import { listMemoryTopics, memoryDate, readMemoryTopic, searchMemoryFiles, workspaceDir } from "./workspace.ts";
+import { listMemoryTopics, memoryDate, readMemoryTopic, searchMemoryFiles, memoryDir } from "./workspace.ts";
 import { withoutExpired } from "./memory-entries.ts";
 import { join } from "node:path";
 
@@ -133,7 +133,7 @@ function sameWord(term: string, word: string): boolean {
 export function topicPassages(botId: string, query: string): RecallPassage[] {
   const terms = recallTerms(query);
   if (!terms.length) return [];
-  const dir = join(workspaceDir(botId), "memory");
+  const dir = join(memoryDir(botId), "memory");
   const out: RecallPassage[] = [];
   try {
     for (const topic of listMemoryTopics(botId)) {

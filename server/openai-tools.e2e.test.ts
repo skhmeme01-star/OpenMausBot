@@ -36,7 +36,7 @@ type ChatRequest = {
 // volatile: it rides the newest user message, under this label, on every
 // request (server/drivers/prompt-split.ts, openai-chat.ts).
 const CONTEXT_NOTE = "Context from OpenMausBot updated since this conversation started; it replaces any earlier copy:";
-const MEMORY = "Your memory (MEMORY.md):\n# Memory\n- Fixture prefers concise replies.";
+const MEMORY = "Your memory (MEMORY.md):\n<long-term-memory>\n# Memory\n- Fixture prefers concise replies.";
 // Who on the team is busy changes whenever a teammate starts or finishes
 // work, so it is volatile too: it must never reach the cached system message.
 const AVAILABILITY = "Team availability";
@@ -138,7 +138,7 @@ it("runs structured MCP calls through real harness approval and continuation, pr
       if (mode === "selected" || mode === "scope-empty") {
         await api("PATCH", `/api/bots/${bot.id}`, { toolScope: { allow: mode === "selected" ? [`mcp:${mode}:write_file`] : [] } });
       }
-      const memoryDirectory = join(fixture.info.dataDir, "workspaces", bot.id);
+      const memoryDirectory = join(fixture.info.dataDir, "bots", bot.id);
       mkdirSync(memoryDirectory, { recursive: true });
       writeFileSync(join(memoryDirectory, "MEMORY.md"), "# Memory\n- Fixture prefers concise replies.\n");
       const before = requests.length;

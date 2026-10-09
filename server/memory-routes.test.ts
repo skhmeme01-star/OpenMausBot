@@ -29,7 +29,7 @@ describe("memory routes through an isolated HTTP fixture", () => {
     });
     return { status: response.status, body: await response.json() };
   };
-  const workspace = () => join(fixture.info.dataDir, "workspaces", botId);
+  const workspace = () => join(fixture.info.dataDir, "bots", botId);
 
   beforeAll(async () => {
     fixture = await launchVerificationServer();

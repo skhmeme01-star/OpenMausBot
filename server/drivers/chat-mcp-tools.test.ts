@@ -116,6 +116,23 @@ describe("Chat MCP session", () => {
     expect(existsSync(f.receipt)).toBe(false);
   });
 
+  it("waives approval only for the built-in memory read, keeping writes and lookalikes gated", async () => {
+    const f = fixture(`
+      if (message.method === "tools/list") {
+        reply(message, {tools:["memory_read", "memory_update"].map(name => ({name,inputSchema:{type:"object",properties:{}},annotations:{readOnlyHint:true}}))});
+        continue;
+      }
+    `);
+    const trusted = await mountChatTools({ agents: f.server }, f.controller.signal);
+    sessions.push(trusted);
+    expect(trusted.view("agents_memory_read", {})).toMatchObject({ ask: false });
+    expect(trusted.view("agents_memory_update", {})).toMatchObject({ ask: true });
+    const lookalike = await mountChatTools({ custom: { agents: f.server } }, f.controller.signal);
+    sessions.push(lookalike);
+    expect(lookalike.view("agents_memory_read", {})).toMatchObject({ ask: true });
+    expect(lookalike.view("agents_memory_update", {})).toMatchObject({ ask: true });
+  });
+
   it("discovers without executing, preserves schemas and validates before forwarding original arguments", async () => {
     const f = fixture();
     const session = await f.mount();

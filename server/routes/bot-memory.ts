@@ -23,12 +23,14 @@ import {
 } from "../memory-store.ts";
 import {
   flushMemoryJournal,
+  recordMemoryChange,
   journalMemoryDelete,
   journalMemoryWrite,
   readMemoryJournal,
   revertMemoryChange,
   type MemoryJournalEntry,
 } from "../memory-journal.ts";
+import { updateMemory } from "../workspace.ts";
 import { upkeepEnabled, type MemoryUpkeep } from "../memory-upkeep.ts";
 import { listLearnedFacts, removeLearned } from "../profile-learned.ts";
 import type { RequestAuth } from "../request-auth.ts";
@@ -98,6 +100,32 @@ export function createBotMemoryRoutes(deps: BotMemoryRouteDeps): RouteHandler {
       } catch (error) {
         return replyMemoryError(res, error);
       }
+    }
+    if (m && method === "POST") {
+      const botId = m[1];
+      if (!deps.bot(botId)) return json(res, 404, { error: "no such bot" });
+      const parsed = z.object({
+        action: z.enum(["append", "replace", "supersede", "remove"]),
+        text: z.string().optional(), oldText: z.string().optional(),
+        until: z.string().optional(), expectedHash: z.string().optional(),
+      }).safeParse(await readBody(req));
+      if (!parsed.success) return json(res, 400, { error: "Expected a memory action and text or oldText." });
+      try {
+        return write(botId, () => {
+          const before = readMemoryDoc(botId, MEMORY_INDEX);
+          if (parsed.data.expectedHash !== undefined && parsed.data.expectedHash !== before.hash) {
+            throw new MemoryStoreError("conflict", 409, "Memory changed; read it again before updating.", { currentHash: before.hash, current: before.text });
+          }
+          const archiveBefore = readMemoryDoc(botId, "memory/archive.md");
+          const result = updateMemory(botId, parsed.data);
+          if (!result.ok) return json(res, result.code === "conflict" ? 409 : 400, result);
+          const archiveAfter = readMemoryDoc(botId, "memory/archive.md");
+          recordMemoryChange(botId, { path: "memory/archive.md", actor: "person", via: "api", before: archiveBefore.exists ? archiveBefore.text : null, after: archiveAfter.exists ? archiveAfter.text : null });
+          const doc = readMemoryDoc(botId, MEMORY_INDEX);
+          const entry = recordMemoryChange(botId, { path: MEMORY_INDEX, actor: "person", via: "api", before: before.exists ? before.text : null, after: doc.text });
+          return json(res, 200, { ...result, ...doc, entry: entry ? journalEntryForClient(botId, entry) : null });
+        });
+      } catch (error) { return replyMemoryError(res, error); }
     }
     if (m && method === "PUT") {
       // The pre-panel whole-file write, kept one release: no hash check, so

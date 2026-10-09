@@ -8,7 +8,7 @@ import { DATA_DIR } from "./config.ts";
 import { factIdentity, isExpired, isMemoryDate, lineFactIdentity, notebookIdentities, parseMemoryEntries, withoutExpired } from "./memory-entries.ts";
 import { parseTopicHeader, renderTopicIndex, TOPIC_INDEX_MAX_TOPICS } from "./memory-topics.ts";
 import { closeMessageDb } from "./message-db.ts";
-import { ensureWorkspace, loadMemory, memorySystemPrompt, searchMemoryFiles, updateMemory, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "./workspace.ts";
+import { ensureWorkspace, loadMemory, memorySystemPrompt, searchMemoryFiles, updateMemory, writeMemoryFile, writeMemoryTopic, memoryDir, WORKSPACES_DIR } from "./workspace.ts";
 
 const BOT = "bot-memory-entries";
 
@@ -143,7 +143,7 @@ describe("memory with until dates and topics, on disk", () => {
     ensureWorkspace(BOT);
     writeMemoryFile(BOT, "- 2026-09-10 · Likes tea\n");
     writeMemoryTopic(BOT, "dining.md", "---\ntitle: Dining\naliases: [food, lunch, restaurants]\n---\n- Loves pasta\n");
-    writeFileSync(join(WORKSPACES_DIR, BOT, "memory", "notes.md"), "plain topic\n");
+    writeFileSync(join(memoryDir(BOT), "memory", "notes.md"), "plain topic\n");
     const prompt = memorySystemPrompt(BOT, { managedWrites: true, fileTools: true });
     expect(prompt).toContain("Your topic notes (not loaded; when a request touches one of these topics, read that file with your file tools before you answer):");
     expect(prompt).toContain("- memory/dining.md — Dining (also: food, lunch, restaurants)");

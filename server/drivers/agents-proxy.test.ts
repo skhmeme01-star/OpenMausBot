@@ -383,6 +383,11 @@ beforeAll(async () => {
       });
       return;
     }
+    if (req.method === "GET" && req.url === "/api/internal/memory") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ text: "- Fixture prefers tea.", truncated: false }));
+      return;
+    }
     if (req.method === "POST" && req.url === "/api/internal/memory") {
       let data = "";
       req.on("data", (c) => (data += c));
@@ -642,6 +647,7 @@ describe("agents-proxy MCP surface", () => {
       "create_room",
       "manage_room",
       "request_credential",
+      "memory_read",
       "memory_update",
       "retry_thread",
       "memory_log",
@@ -723,7 +729,7 @@ describe("agents-proxy MCP surface", () => {
       "list_shared_computers",
       "list_bots", "list_rooms", "check_delegation", "wait_delegation", "list_threads",
       "list_team_setup",
-      "session_search", "session_read", "list_routines", "skills_list",
+      "memory_read", "session_search", "session_read", "list_routines", "skills_list",
     ];
     expect(list.result.tools.filter((tool: any) => tool.annotations?.readOnlyHint)
       .map((tool: any) => tool.name)).toEqual(readNames);
@@ -1333,6 +1339,12 @@ describe("agents-proxy MCP surface", () => {
     } finally {
       delegationStatusResponse = { status: "done", toBotName: "Helper", result: "All done." };
     }
+  });
+
+  it("memory_read uses the active capability and cannot select another bot", async () => {
+    const read = await callTool("memory_read", { bot_id: "another-bot" });
+    expect(read.result.content[0].text).toContain("Fixture prefers tea");
+    expect(read.result.isError).not.toBe(true);
   });
 
   it("memory_update forwards only the configured owner and thread with its capability token", async () => {

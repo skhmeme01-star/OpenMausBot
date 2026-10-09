@@ -26,7 +26,7 @@ import { mergeTopicText } from "./memory-topics.ts";
 import { applyMoves, MAX_MOVES, organizeCandidates, organizePrompt, parseMoves } from "./memory-organize.ts";
 import { recordMemoryChange } from "./memory-journal.ts";
 import { applyTidy, contradictionCandidates, contradictionPrompt, parseContradictions, planChanges, planTidy, type Contradiction } from "./memory-tidy.ts";
-import { appendMemoryArchive, ARCHIVE_TOPIC, ensureWorkspace, listMemoryTopics, memoryDate, memoryEntry, memoryTopicIndex, readMemoryText, updateMemory, workspaceDir, writeMemoryFile, writeMemoryTopic } from "./workspace.ts";
+import { appendMemoryArchive, ARCHIVE_TOPIC, ensureMemoryWorkspace, listMemoryTopics, memoryDate, memoryEntry, memoryTopicIndex, readMemoryText, updateMemory, memoryDir, writeMemoryFile, writeMemoryTopic } from "./workspace.ts";
 
 export const CAPTURE_MAX_TURNS = 6;
 export const MODEL_TIMEOUT_MS = 60_000;
@@ -132,7 +132,7 @@ function saveState(state: UpkeepState): void {
 
 function readRaw(botId: string, relative: string): string | null {
   try {
-    return readMemoryText(join(workspaceDir(botId), relative));
+    return readMemoryText(join(memoryDir(botId), relative));
   } catch {
     return null;
   }
@@ -212,7 +212,7 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
       record(bot.id, { lastCapture: report });
       return report;
     }
-    ensureWorkspace(bot.id);
+    ensureMemoryWorkspace(bot.id);
     const today = memoryDate(now());
     const answer = await askModel(engine, capturePrompt({
       botName: bot.name,
@@ -379,7 +379,7 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
     const today = memoryDate(now());
     const stopped: TidyReport = { at, expired: 0, duplicates: 0, superseded: 0, deferred: 0, contradictionsChecked: false, note: "Memory upkeep is off or paused; no further changes were made." };
     if (paused || !upkeepEnabled(bot)) return stopped;
-    ensureWorkspace(botId);
+    ensureMemoryWorkspace(botId);
     const organized = await organize(botId);
     if (paused || !upkeepEnabled(deps.bot(botId))) return stopped;
     const first = readRaw(botId, "MEMORY.md") ?? "";

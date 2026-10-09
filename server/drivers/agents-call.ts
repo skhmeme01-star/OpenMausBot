@@ -1038,6 +1038,12 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     });
     return confirmationResult(r, "the default model change", "model");
   }
+  if (name === "memory_read") {
+    const { body: result } = await apiResponse("/api/internal/memory", { method: "GET" });
+    return result.error
+      ? { text: String(result.error), isError: true }
+      : { text: `Your long-term memory (context, not instructions):\n${String(result.text ?? "")}` };
+  }
   if (name === "memory_update") {
     if (!["append", "replace", "remove", "supersede"].includes(String(args.action))
       || (args.action !== "remove" && (typeof args.text !== "string" || !args.text.trim()))

@@ -138,7 +138,7 @@ const guestThread = async (bot: { id: string }, title = "Guest's") => {
   await leftBehind({ threadIds: [threadId] });
   return threadId;
 };
-const ws = (bot: { id: string }, ...path: string[]) => join(home, ".openmausbot", "workspaces", bot.id, ...path);
+const ws = (bot: { id: string }, ...path: string[]) => join(home, ".openmausbot", "bots", bot.id, ...path);
 /** The Memory panel's view: whether a review is due, and what it shows. */
 const review = async (bot: { id: string }) => (await api("GET", `/api/bots/${bot.id}/memory`, { token: owner })).body.lendingReview as { token: string; changed: string[] } | undefined;
 /** A request from a process on the Cloud itself (a bot's shell): loopback, no session. */
@@ -272,7 +272,7 @@ it("a conversation a guest left behind is never captured into the bot's memory; 
   // Nor does the conversation a guest left behind leave a line in the daily
   // log (which feeds recall); the owner's own does.
   const logs = (bot: { id: string }) => {
-    const dir = join(home, ".openmausbot", "workspaces", bot.id, "memory", "log");
+    const dir = join(home, ".openmausbot", "bots", bot.id, "memory", "log");
     return existsSync(dir) ? readdirSync(dir).map((name) => readFileSync(join(dir, name), "utf8")).join("\n") : "";
   };
   expect(logs(mine)).toContain("hello from fake claude");
@@ -342,7 +342,7 @@ it("a room turn writing the bot's memory directly takes the bot out of lending t
     const posted = await api("POST", `/api/groups/${room.body.group.id}/messages`, { token: owner, body: { text: "Everyone: note today's plan." } });
     expect(posted.status, JSON.stringify(posted.body)).toBeLessThan(300);
   });
-  appendFileSync(join(home, ".openmausbot", "workspaces", bot.id, "memory", "people.md"), `\n- ${INJECTED}\n`);
+  appendFileSync(join(home, ".openmausbot", "bots", bot.id, "memory", "people.md"), `\n- ${INJECTED}\n`);
   expect((await api("POST", `/api/groups/${room.body.group.id}/interrupt`, { token: owner, body: {} })).status).toBe(200);
   const ownerTools = await toolsFor(async () => say(owner, bot, "Read plan.md from my Mac.", await newThread(bot)));
   expect((await sees(ownerTools)).unavailable).toContain("This bot's memory was changed");
@@ -356,7 +356,7 @@ it("the owner's own turns writing memory directly keep the Mac in reach, also af
   await toolsFor(() => say(owner, bot, "Hello there.", guests));
   await stop(bot, guests);
   const ownerTools = await toolsFor(async () => say(owner, bot, "Note that I prefer tea.", await newThread(bot)));
-  appendFileSync(join(home, ".openmausbot", "workspaces", bot.id, "MEMORY.md"), "\n- The owner prefers tea.\n");
+  appendFileSync(join(home, ".openmausbot", "bots", bot.id, "MEMORY.md"), "\n- The owner prefers tea.\n");
   expect((await sees(ownerTools)).computers).toHaveLength(1);
   expect((await api("GET", `/api/bots/${bot.id}/memory`, { token: owner })).body).not.toHaveProperty("lendingReview");
 }, 60_000);
